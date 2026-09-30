@@ -107,15 +107,12 @@ header.top p{margin:0;color:var(--muted);font-size:13px}
 .f:empty::before{content:attr(data-ph);color:#8A7A3A;font-weight:400;font-style:italic}
 .f.bad{background:#F9D9D4;border-bottom-color:var(--err)}
 .f.up{text-transform:uppercase}
-.datebox{position:relative;display:inline-block}
 .page.notas{padding:0.984in 1.181in}
 .page.notas p{margin-bottom:8pt}
 .page p.c{text-align:center}
 .mys-logo{position:absolute;left:1.181in;top:0.217in;width:1.252in;height:1.183in;object-fit:contain}
 .auto{background:var(--auto);border-bottom:1.5px dotted var(--olive);padding:0 2px;border-radius:2px}
 select.f.sel{font:inherit;color:inherit;border:0;border-bottom:1.5px solid var(--field-line);-webkit-appearance:none;appearance:none;padding:0 2px;margin:0;cursor:pointer}
-.datebox input{position:absolute;inset:0;opacity:0;width:100%;height:100%;cursor:pointer;border:0;padding:0}
-.datebox .f{cursor:pointer}
 
 @media (max-width: 1000px){
   .work{grid-template-columns:1fr}
@@ -199,7 +196,7 @@ select.f.sel{font:inherit;color:inherit;border:0;border-bottom:1.5px solid var(-
       <p class="hdr"><b>OBJ.:</b> 1.-Solicita acreditación de Operadores de <span class="pre">    </span>CCTV y Alarmas.</p>
       <p class="hdr"><b>REF.:</b> 1.- Artículo 111, del Reglamento de Seguridad Privada N°209, de fecha 18-06-2024 y Art. N°46 ley N°21.659.</p>
       <p class="blank"></p>
-      <p class="r"><b>Santiago,</b> <span class="datebox"><span class="f" id="fechaTxt" data-k="fecha" tabindex="0" role="button" aria-label="Cambiar fecha"></span><input type="date" id="fechaIn" aria-label="Fecha de la solicitud"></span></p>
+      <p class="r"><b>Santiago,</b> <span class="f" data-k="dia" data-ph="día"></span> de <span class="f" data-k="mes" data-ph="mes"></span> <span class="f" data-k="anio" data-ph="año"></span></p>
       <p class="blank"></p>
       <p>DE: <span class="f up" data-k="nombre" data-ph="NOMBRE COMPLETO"></span></p>
       <p>AL: OFICINA DE OS.10. SEGURIDAD PRIVADA</p>
@@ -261,7 +258,7 @@ select.f.sel{font:inherit;color:inherit;border:0;border-bottom:1.5px solid var(-
       <p class="blank"></p>
       <p class="c"><b>CERTIFICADO DE NOTAS</b></p>
       <p class="blank"></p>
-      <p class="r"><b>Santiago, Chile, <select class="f sel" id="nMes" aria-label="Mes"></select> de <select class="f sel" id="nAnio" aria-label="Año"></select></b></p>
+      <p class="r"><b>Santiago, Chile, <span class="f" data-n="mes" data-ph="mes"></span> de <span class="f" data-n="anio" data-ph="año"></span></b></p>
       <p class="blank"></p>
       <p class="blank"></p>
       <p>Se certifica que <b><span class="f" data-n="nombre" data-ph="Nombre completo del alumno"></span>,</b> RUT <span class="f" data-n="rut" data-ph="12.345.678-9"></span>, ha aprobado satisfactoriamente el <b>Curso de Operador de CCTV y Alarmas</b>, con una duración total de <b>50 horas cronológicas</b>, modalidad <b>100% online asincrónica</b>, impartido por <b>MyS Capacitación SpA</b>, OTEC acreditada ante <b>SENCE (código curso Nº1238080414), OS10 de Carabineros de Chile y la Subsecretaría de Prevención del Delito.</b></p>
@@ -331,6 +328,27 @@ var MYS_CORE = (function () {
   function celularValido(s) { return /^9\d{8}$/.test(limpiarCelular(s)); }
   function correoValido(s) { return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(String(s || "").trim()); }
 
+  // Acepta "septiembre", "Septiembre", "sept", "9" o "09" y devuelve "septiembre" (o "" si no reconoce)
+  function normalizarMes(s) {
+    var t = String(s || "").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\.$/, "");
+    if (/^\d{1,2}$/.test(t)) return MESES[+t - 1] || "";
+    if (t.length < 3) return "";
+    for (var i = 0; i < MESES.length; i++) if (MESES[i].indexOf(t) === 0) return MESES[i];
+    return "";
+  }
+  // null si está bien; si no, el texto del problema
+  function errorFecha(dia, mes, anio, conDia) {
+    var y = String(anio || "").trim(), m = MESES.indexOf(mes);
+    if (conDia && !/^\d{1,2}$/.test(String(dia || "").trim())) return "Fecha: falta el día";
+    if (m < 0) return "Fecha: mes no reconocido (escríbalo con letras, por ejemplo septiembre)";
+    if (!/^\d{4}$/.test(y) || +y < 2020 || +y > 2100) return "Fecha: el año debe tener 4 dígitos";
+    if (conDia) {
+      var d = +String(dia).trim(), max = new Date(+y, m + 1, 0).getDate();
+      if (d < 1 || d > max) return "Fecha: " + mes + " de " + y + " no tiene día " + d;
+    }
+    return null;
+  }
+
   function validar(d) {
     var e = [];
     function req(k, label) { if (!String(d[k] || "").trim()) e.push({ campo: k, msg: label + ": falta completar" }); }
@@ -343,8 +361,8 @@ var MYS_CORE = (function () {
     else if (!correoValido(d.correo)) e.push({ campo: "correo", msg: "Correo: formato no válido" });
     req("domicilio", "Domicilio");
     req("comuna", "Comuna");
-    if (!(+d.dia >= 1 && +d.dia <= 31) || MESES.indexOf(d.mes) < 0 || !/^\d{4}$/.test(String(d.anio)))
-      e.push({ campo: "fecha", msg: "Fecha: incompleta" });
+    var ef = errorFecha(d.dia, d.mes, d.anio, true);
+    if (ef) e.push({ campo: "fecha", msg: ef });
     if (d.tipo === "empresa" && !d.logo) e.push({ campo: "logo", msg: "Logo de la empresa: falta subirlo" });
     return e;
   }
@@ -414,7 +432,8 @@ var MYS_CORE = (function () {
   }
 
   return { MESES: MESES, generar: generar, validar: validar, formatearRut: formatearRut,
-           rutValido: rutValido, limpiarCelular: limpiarCelular, esc: esc };
+           rutValido: rutValido, limpiarCelular: limpiarCelular, esc: esc,
+           normalizarMes: normalizarMes, errorFecha: errorFecha };
 })();
 
 
@@ -451,7 +470,8 @@ var MYS_NOTAS = (function (C) {
     if (!String(d.nota || "").trim()) e.push({ campo: "nota", msg: "Nota final: falta completar" });
     else if (!p || p.n > 7) e.push({ campo: "nota", msg: "Nota final: use escala 1,0 a 7,0 con un decimal" });
     else if (p.n < 4) e.push({ campo: "nota", msg: "Nota final: bajo 4,0 el alumno no aprobó; el certificado dice que aprobó satisfactoriamente" });
-    if (C.MESES.indexOf(d.mes) < 0 || !/^\d{4}$/.test(String(d.anio))) e.push({ campo: "fecha", msg: "Fecha: incompleta" });
+    var ef = C.errorFecha(null, d.mes, d.anio, false);
+    if (ef) e.push({ campo: "fecha", msg: ef });
     return e;
   }
   async function generar(JSZip, plantilla, d) {
@@ -522,7 +542,7 @@ if (typeof module !== "undefined") module.exports = { MYS_CORE: MYS_CORE, MYS_NO
   }
 
   /* ---------- Campos editables sobre la hoja ---------- */
-  var fields = $$(".f[data-k]").filter(function(el){ return el.getAttribute("data-k")!=="fecha"; });
+  var fields = $$(".f[data-k]");
   var ceMode = (function(){ var d=document.createElement("div"); try{ d.contentEditable="plaintext-only"; }catch(e){} return d.contentEditable==="plaintext-only" ? "plaintext-only":"true"; })();
   fields.forEach(function(el){
     el.setAttribute("contenteditable", ceMode);
@@ -545,6 +565,8 @@ if (typeof module !== "undefined") module.exports = { MYS_CORE: MYS_CORE, MYS_NO
     el.addEventListener("blur", function(){
       var k = el.getAttribute("data-k"), v = el.textContent.replace(/\s+/g," ").trim();
       if (k==="nombre") v = v.toUpperCase();
+      if (k==="dia" && /^\d+$/.test(v)) v = String(+v);
+      if (k==="mes" && v) v = C.normalizarMes(v) || v;
       if (k==="rut" && v) v = C.formatearRut(v);
       if (k==="celular" && v) v = C.limpiarCelular(v);
       st[k] = v; espejo(k, null); refresh();
@@ -555,15 +577,10 @@ if (typeof module !== "undefined") module.exports = { MYS_CORE: MYS_CORE, MYS_NO
   }
 
   /* ---------- Fecha ---------- */
-  var fechaIn = $("#fechaIn"), fechaTxt = $("#fechaTxt");
-  function setFecha(iso){
-    var p = iso.split("-"); st.anio=+p[0]; st.mes=C.MESES[+p[1]-1]; st.dia=+p[2];
-    fechaTxt.textContent = st.dia+" de "+st.mes+" "+st.anio; refresh();
-  }
-  var hoy = new Date(); var iso = hoy.getFullYear()+"-"+String(hoy.getMonth()+1).padStart(2,"0")+"-"+String(hoy.getDate()).padStart(2,"0");
-  fechaIn.value = iso; setFecha(iso);
-  fechaIn.addEventListener("change", function(){ if(fechaIn.value) setFecha(fechaIn.value); });
-  fechaTxt.addEventListener("keydown", function(e){ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); try{fechaIn.showPicker();}catch(_){fechaIn.focus();} } });
+  // Se precarga con la fecha de hoy; cada parte se edita escribiendo sobre ella
+  var hoy = new Date();
+  st.dia = String(hoy.getDate()); st.mes = C.MESES[hoy.getMonth()]; st.anio = String(hoy.getFullYear());
+  ["dia","mes","anio"].forEach(function(k){ espejo(k, null); });
 
   /* ---------- Logo ---------- */
   var slot = $("#logoSlot"), file = $("#logoFile");
@@ -593,13 +610,13 @@ if (typeof module !== "undefined") module.exports = { MYS_CORE: MYS_CORE, MYS_NO
   function refresh(typing){
     var errs = C.validar(st);
     var bad = {}; errs.forEach(function(e){ bad[e.campo]=true; });
-    if(!typing) $$(".f[data-k]").forEach(function(el){ var k=el.getAttribute("data-k"); el.classList.toggle("bad", !!bad[k] && (k==="fecha" || !!st[k])); });
+    if(!typing) $$(".f[data-k]").forEach(function(el){ var k=el.getAttribute("data-k"); var esFecha = k==="dia"||k==="mes"||k==="anio"; el.classList.toggle("bad", esFecha ? !!bad.fecha : (!!bad[k] && !!st[k])); });
     var w = $("#issuesWrap");
     if(!errs.length){ w.innerHTML = '<p class="ok">Todo completo. Lista para descargar.</p>'; }
     else {
       w.innerHTML = '<ul class="issues">'+errs.map(function(e){ return '<li><button type="button" data-go="'+e.campo+'">'+e.msg+'</button></li>'; }).join("")+'</ul>';
       $$("[data-go]", w).forEach(function(b){ b.addEventListener("click", function(){
-        var k=b.getAttribute("data-go"), t = k==="logo" ? slot : k==="fecha" ? fechaTxt : $('.f[data-k="'+k+'"]');
+        var k=b.getAttribute("data-go"), t = k==="logo" ? slot : k==="fecha" ? $('.f[data-k="dia"]') : $('.f[data-k="'+k+'"]');
         t.scrollIntoView({block:"center"}); t.focus();
       }); });
     }
@@ -647,25 +664,13 @@ if (typeof module !== "undefined") module.exports = { MYS_CORE: MYS_CORE, MYS_NO
   function b64ToBytes(b){ var s=atob(b), u=new Uint8Array(s.length); for(var i=0;i<s.length;i++)u[i]=s.charCodeAt(i); return u; }
   var TPL2 = b64ToBytes(TPL2_B64);
   var hoy = new Date();
-  var st = { nombre:"", rut:"", nota:"", mes:C.MESES[hoy.getMonth()], anio:hoy.getFullYear() };
+  var st = { nombre:"", rut:"", nota:"", mes:C.MESES[hoy.getMonth()], anio:String(hoy.getFullYear()) };
 
   // Logo: se toma del mismo Word original, así la vista y el documento usan la misma imagen
   if (window.JSZip) JSZip.loadAsync(TPL2).then(function(z){ return z.file("word/media/image1.png").async("base64"); })
     .then(function(b){ $("#mysLogo").src = "data:image/png;base64," + b; });
 
   // Mes y año
-  var selMes = $("#nMes"), selAnio = $("#nAnio");
-  C.MESES.forEach(function(m){ var o=document.createElement("option"); o.value=o.textContent=m; selMes.appendChild(o); });
-  for (var y = hoy.getFullYear()-1; y <= hoy.getFullYear()+1; y++){ var o=document.createElement("option"); o.value=o.textContent=y; selAnio.appendChild(o); }
-  selMes.value = st.mes; selAnio.value = st.anio;
-  function ajustarSel(sel){ // ancho del select = ancho del texto, para no desordenar la línea
-    var m = document.createElement("span"); m.style.cssText="position:absolute;visibility:hidden;white-space:pre;font:inherit;font-weight:700";
-    m.textContent = sel.value; sel.parentNode.appendChild(m); sel.style.width = (m.offsetWidth+6)+"px"; m.remove();
-  }
-  [selMes, selAnio].forEach(function(sel){
-    sel.addEventListener("change", function(){ st.mes = selMes.value; st.anio = +selAnio.value; ajustarSel(sel); refresh(); });
-  });
-
   // Campos editables
   var ceMode = (function(){ var d=document.createElement("div"); try{ d.contentEditable="plaintext-only"; }catch(e){} return d.contentEditable==="plaintext-only" ? "plaintext-only":"true"; })();
   var fields = $$(".f[data-n]");
@@ -680,6 +685,7 @@ if (typeof module !== "undefined") module.exports = { MYS_CORE: MYS_CORE, MYS_NO
       if (k==="nombre") v = N.formatoNombre(v);
       if (k==="rut" && v) v = C.formatearRut(v);
       if (k==="nota"){ var p = N.parseNota(v); if (p) v = p.txt; }
+      if (k==="mes" && v) v = C.normalizarMes(v) || v;
       st[k] = v; el.textContent = v; refresh();
     });
   });
@@ -690,13 +696,13 @@ if (typeof module !== "undefined") module.exports = { MYS_CORE: MYS_CORE, MYS_NO
     $("#notaTxt").textContent = p && p.n <= 7 ? N.notaEnPalabras(p) : "nota en palabras";
     var errs = N.validar(st), bad = {};
     errs.forEach(function(e){ bad[e.campo]=true; });
-    if(!typing) fields.forEach(function(el){ var k=el.getAttribute("data-n"); el.classList.toggle("bad", !!bad[k] && !!st[k]); });
+    if(!typing) fields.forEach(function(el){ var k=el.getAttribute("data-n"); el.classList.toggle("bad", (k==="mes"||k==="anio") ? !!bad.fecha : (!!bad[k] && !!st[k])); });
     var w = $("#issuesN");
     if(!errs.length) w.innerHTML = '<p class="ok">Todo completo. Listo para descargar.</p>';
     else {
       w.innerHTML = '<ul class="issues">'+errs.map(function(e){ return '<li><button type="button" data-go="'+e.campo+'">'+e.msg+'</button></li>'; }).join("")+'</ul>';
       $$("[data-go]", w).forEach(function(b){ b.addEventListener("click", function(){
-        var k=b.getAttribute("data-go"), t = k==="fecha" ? selMes : $('.f[data-n="'+k+'"]');
+        var k=b.getAttribute("data-go"), t = k==="fecha" ? $('.f[data-n="mes"]') : $('.f[data-n="'+k+'"]');
         t.scrollIntoView({block:"center"}); t.focus();
       }); });
     }
@@ -735,13 +741,14 @@ if (typeof module !== "undefined") module.exports = { MYS_CORE: MYS_CORE, MYS_NO
     if (avail && need>avail) page.style.zoom=(avail/need).toFixed(3);
   }
   window.addEventListener("resize", fit);
+  pintar();
 
   /* ---------- Navegación entre módulos ---------- */
   function ruta(){
     var notas = location.hash === "#notas";
     $("#modSolicitud").hidden = notas; $("#modNotas").hidden = !notas;
     if(notas){ $("#tabNot").setAttribute("aria-current","page"); $("#tabSol").removeAttribute("aria-current"); } else { $("#tabSol").setAttribute("aria-current","page"); $("#tabNot").removeAttribute("aria-current"); }
-    if (notas){ fit(); ajustarSel(selMes); ajustarSel(selAnio); refresh(); }
+    if (notas){ fit(); refresh(); }
     else if (window.MYS_SOL_FIT) window.MYS_SOL_FIT();
   }
   $("#tabSol").setAttribute("aria-current","page");
